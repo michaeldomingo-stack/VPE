@@ -6,33 +6,61 @@ import plotly.express as px
 st.set_page_config(page_title="Provider VPE Ratio", layout="wide")
 
 st.title("📊 Provider VPE Ratio Dashboard")
-st.markdown("Upload your CSV file to visualize and compare provider-specific ratios.")
+st.markdown("Upload one or more CSV files to visualize and compare provider-specific ratios across clinics.")
 
 # --- Inputs ---
-uploaded_file = st.file_uploader("Upload CSV file", type=['csv'])
+# UPGRADE: accept_multiple_files=True allows 1 or more files to be uploaded simultaneously
+uploaded_files = st.file_uploader("Upload CSV file(s)", type=['csv'], accept_multiple_files=True)
 
 # --- Main App Logic ---
-if uploaded_file is not None:
+if uploaded_files:
     try:
-        df = pd.read_csv(uploaded_file)
-        st.success("Data loaded successfully!")
-        
-        with st.expander("Preview Raw Data"):
-            st.dataframe(df.head())
-
         st.markdown("---")
+        # UPGRADE: A toggle to handle providers who work at multiple clinics
+        split_clinics = st.checkbox("Separate providers by clinic (e.g., 'John Doe (QA)' vs 'John Doe (SLU)')", 
+                                    value=False, 
+                                    help="Check this to compare a provider's performance between clinics. Leave unchecked to merge their totals into one.")
         
-        # --- Provider Selection ---
-        # Hardcode the column name to exactly "Provider"
-        provider_col = "Provider"
+        df_list = []
+        valid_files = 0
         
-        if provider_col not in df.columns:
-            st.error(f"Error: Could not find a column named '{provider_col}' in your CSV. Please check your column headers.")
-        else:
+        for file in uploaded_files:
+            temp_df = pd.read_csv(file)
+            
+            if "Provider" not in temp_df.columns:
+                st.error(f"Error: Could not find a 'Provider' column in '{file.name}'. Skipping this file.")
+                continue
+            
+            # Extract a clean clinic name (e.g., "v5 VPE QA") from the filename
+            clinic_name = file.name.split(' [')[0] if ' [' in file.name else file.name.replace('.csv', '')
+            
+            if split_clinics:
+                # Append the clinic name to the provider's name
+                temp_df["Provider"] = temp_df["Provider"].astype(str) + f" ({clinic_name})"
+            else:
+                temp_df["Provider"] = temp_df["Provider"].astype(str)
+            
+            df_list.append(temp_df)
+            valid_files += 1
+            
+        if df_list:
+            # Combine all valid files into one massive dataframe
+            df = pd.concat(df_list, ignore_index=True)
+            
+            st.success(f"Successfully loaded and merged data from {valid_files} clinic(s)!")
+            
+            with st.expander("Preview Master Data"):
+                st.dataframe(df.head())
+
+            st.markdown("---")
+            
+            # --- Provider Selection ---
+            provider_col = "Provider"
+            
             # Get unique providers, removing empty rows
             providers = df[provider_col].dropna().astype(str).unique()
             
-            # UPGRADE: Use multiselect to allow picking multiple providers for comparison
+            # Use multiselect to allow picking multiple providers for comparison
             selected_providers = st.multiselect("Select Providers to analyze and compare:", sorted(providers), default=[sorted(providers)[0]])
         
             if not selected_providers:
@@ -59,13 +87,11 @@ if uploaded_file is not None:
                 
                 selected_pairs = []
                 for pair in valid_pairs:
-                    # UPGRADE: Pull the exact column names from Row 1
                     num_col_name = str(df.columns[pair["num"]]) # F/Us column name
                     den_col_name = str(df.columns[pair["den"]]) # Evals column name
                     
                     label_title = f"{num_col_name} & {den_col_name}"
                     
-                    # Create the toggle using the dynamic title
                     if st.sidebar.checkbox(label_title, value=True):
                         pair["label"] = label_title
                         selected_pairs.append(pair)
@@ -77,7 +103,6 @@ if uploaded_file is not None:
                     all_results = []
                     provider_totals = {}
                     
-                    # UPGRADE: Loop through every selected provider to build comparison data
                     for provider in selected_providers:
                         provider_df = df[df[provider_col].astype(str) == provider]
                         
@@ -120,7 +145,6 @@ if uploaded_file is not None:
                     # --- Visualizations ---
                     st.subheader("📈 Ratio Breakdown & Comparison")
                     
-                    # UPGRADE: Create dynamic columns to show metrics for each selected provider side-by-side
                     cols = st.columns(len(selected_providers))
                     for i, provider in enumerate(selected_providers):
                         with cols[i]:
@@ -131,13 +155,12 @@ if uploaded_file is not None:
                     
                     st.markdown("---")
                     
-                    # UPGRADE: Create Grouped Bar Chart
+                    # Grouped Bar Chart
                     fig = px.bar(results_df, x="Pairing", y="Ratio", color="Provider", barmode="group", text="Ratio",
                                  title="Provider Comparison: Individual Pairings")
                     
                     fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
                     
-                    # UPGRADE: Add a color-matched horizontal dashed line for each provider's Grand Total Ratio
                     color_sequence = px.colors.qualitative.Plotly
                     for i, provider in enumerate(selected_providers):
                         prov_color = color_sequence[i % len(color_sequence)]
@@ -147,7 +170,6 @@ if uploaded_file is not None:
                                       annotation_text=f"{provider} Total: {g_ratio:.2f}", 
                                       annotation_position="top right", annotation_font_size=12, annotation_font_color=prov_color)
                     
-                    # Tweak the chart layout to give the labels room to breathe
                     if not results_df.empty and results_df['Ratio'].max() > 0:
                         fig.update_layout(yaxis_range=[0, results_df['Ratio'].max() * 1.3])
 
