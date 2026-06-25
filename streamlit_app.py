@@ -72,4 +72,12 @@ if df is not None:
     col1, col2 = st.columns(2)
     with col1:
         # Dynamically ask which column holds the provider names (defaults to the first column)
-        provider
+        provider_col = st.selectbox("1. Which column contains the Provider names?", df.columns.tolist(), index=0)
+    
+    with col2:
+        # Get unique providers, removing empty rows, and create a dropdown
+        providers = df[provider_col].dropna().astype(str).unique()
+        selected_provider = st.selectbox("2. Select a Provider to analyze:", sorted(providers))
+    
+    # Filter the dataframe to ONLY show rows for the selected provider
+    provider
