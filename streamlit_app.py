@@ -125,9 +125,9 @@ if uploaded_file is not None:
                 if not results_df.empty and results_df['Ratio'].max() > 0:
                     fig.update_layout(yaxis_range=[0, results_df['Ratio'].max() * 1.2])
 
-st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True)
 
-# Data Table View
+                # Data Table View
                 st.subheader("🔢 Computed Data")
                 st.dataframe(results_df, use_container_width=True)
                 
